@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0f17">
+<title>Ludo League</title>
+<style>
+:root{--bg:#0b0f17;--card:#131a26;--field:#0d121c;--line:#232c3d;--text:#f2f4f8;--mute:#8993a8;--red:#e11d48;--red2:#be123c;--amber:#f59e0b;--err:#ff6b81}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:radial-gradient(900px 500px at 50% -10%,#2a0d18,var(--bg));color:var(--text);font:16px/1.4 Roboto,system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;align-items:center;justify-content:center;padding:max(20px,env(safe-area-inset-top)) 20px max(20px,env(safe-area-inset-bottom))}
+main{width:100%;max-width:420px}
+.pill{display:block;width:max-content;margin:0 auto 14px;background:var(--red);padding:8px 18px;border-radius:999px;font-weight:700;letter-spacing:.18em;font-size:13px}
+h1{margin:0;text-align:center;font-size:clamp(40px,12vw,56px);line-height:1;font-weight:900;letter-spacing:-.01em;background:linear-gradient(90deg,#fff 30%,#fbb6c4);-webkit-background-clip:text;background-clip:text;color:transparent}
+.tag{text-align:center;color:var(--mute);margin:10px 0 28px;font-size:18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:28px;padding:22px}
+.tabs{display:flex;background:var(--field);border-radius:16px;padding:6px;margin-bottom:20px}
+.tabs button{flex:1;border:0;background:none;color:var(--mute);font:inherit;font-weight:700;padding:13px;border-radius:12px;cursor:pointer}
+.tabs button[aria-selected=true]{background:var(--red);color:#fff;box-shadow:0 6px 18px #e11d4855}
+label{display:block;color:var(--mute);font-weight:500;margin:14px 0 8px}
+.field{position:relative}
+input{width:100%;background:var(--field);border:1px solid var(--line);border-radius:16px;color:var(--text);font:inherit;font-size:19px;padding:17px 18px}
+input::placeholder{color:#59627a}
+input:focus-visible,button:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+.show{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:0;color:var(--mute);font:inherit;padding:12px;cursor:pointer}
+.go{width:100%;margin-top:22px;border:0;border-radius:16px;background:linear-gradient(180deg,var(--red),var(--red2));color:#fff;font:inherit;font-weight:700;font-size:19px;padding:17px;cursor:pointer;box-shadow:0 10px 24px #e11d4844}
+.go:disabled{opacity:.6;cursor:wait}
+.link{display:block;margin:16px auto 0;background:none;border:0;color:var(--amber);font:inherit;font-weight:500;cursor:pointer;padding:8px}
+.link:disabled{color:var(--mute);cursor:default}
+.msg{min-height:22px;margin:14px 2px 0;font-size:15px;color:var(--err)}
+.msg.ok{color:#5eead4}
+.hint{color:var(--mute);font-size:14px;margin:8px 2px 0}
+#code{text-align:center;letter-spacing:.5em;font-size:28px;font-weight:700;padding-left:calc(18px + .5em)}
+.sub{margin:0 0 4px;color:var(--mute)}
+.sub b{color:var(--text)}
+[hidden]{display:none!important}
+@media (prefers-reduced-motion:no-preference){.card{transition:transform .2s}}
+</style>
+</head>
+<body>
+<main>
+  <span class="pill">ONLINE LEAGUE</span>
+  <h1>LUDO LEAGUE</h1>
+  <p class="tag">Play · Rank · Win</p>
+
+  <section class="card">
+    <form id="auth" novalidate>
+      <div class="tabs" role="tablist">
+        <button type="button" role="tab" id="tabLogin" aria-selected="true">Login</button>
+        <button type="button" role="tab" id="tabReg" aria-selected="false">Register</button>
+      </div>
+      <label for="phone">Phone number</label>
+      <input id="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="0745805716">
+      <label for="pw">Password</label>
+      <div class="field">
+        <input id="pw" type="password" autocomplete="current-password" placeholder="Enter password">
+        <button type="button" class="show" id="show">Show</button>
+      </div>
+      <p class="hint" id="pwHint" hidden>At least 8 characters, with a letter and a number.</p>
+      <div class="msg" id="msg" role="alert"></div>
+      <button class="go" id="submit" type="submit">Login</button>
+    </form>
+
+    <form id="verify" novalidate hidden>
+      <p class="sub">We sent a 6-digit code by SMS to <b id="sentTo"></b></p>
+      <label for="code">Verification code</label>
+      <input id="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="······">
+      <div class="msg" id="vmsg" role="alert"></div>
+      <button class="go" id="vsubmit" type="submit">Verify number</button>
+      <button type="button" class="link" id="resend">Send a new code</button>
+      <button type="button" class="link" id="back">Use a different number</button>
+    </form>
+  </section>
+</main>
+
+<script>
+(function(){
+  var $=function(id){return document.getElementById(id)};
+  var mode="login", phone="", wait=null;
+
+  function setMode(m){
+    mode=m;
+    $("tabLogin").setAttribute("aria-selected",m==="login");
+    $("tabReg").setAttribute("aria-selected",m==="register");
+    $("submit").textContent=m==="login"?"Login":"Create account";
+    $("pw").autocomplete=m==="login"?"current-password":"new-password";
+    $("pwHint").hidden=m==="login";
+    $("msg").textContent="";
+  }
+  $("tabLogin").onclick=function(){setMode("login")};
+  $("tabReg").onclick=function(){setMode("register")};
+  $("show").onclick=function(){
+    var p=$("pw"),s=p.type==="password";
+    p.type=s?"text":"password"; $("show").textContent=s?"Hide":"Show";
+  };
+
+  function say(el,text,ok){el.textContent=text||"";el.className="msg"+(ok?" ok":"")}
+
+  function call(body){
+    return fetch("/api/auth",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
+      .then(function(r){return r.json().then(function(d){if(!r.ok)throw new Error(d.error||"Something went wrong.");return d})})
+      .catch(function(e){
+        if(e instanceof TypeError)throw new Error("Cannot reach the server. Open the site from your Netlify link, not a saved file.");
+        throw e;
+      });
+  }
+
+  function finish(d){
+    try{localStorage.setItem("ll_token",d.token);localStorage.setItem("ll_phone",d.phone)}catch(e){}
+    location.replace("index.html");
+  }
+
+  function showCode(d){
+    phone=d.phone;
+    $("sentTo").textContent=d.phone;
+    $("auth").hidden=true; $("verify").hidden=false;
+    $("code").value=""; $("code").focus();
+    say($("vmsg"), d.devCode?"Test mode: your code is "+d.devCode:"", true);
+    startWait();
+  }
+
+  function startWait(){
+    var left=60, b=$("resend");
+    b.disabled=true; clearInterval(wait);
+    wait=setInterval(function(){
+      left--; b.textContent=left>0?"Send a new code in "+left+"s":"Send a new code";
+      if(left<=0){clearInterval(wait);b.disabled=false}
+    },1000);
+    b.textContent="Send a new code in 60s";
+  }
+
+  $("auth").onsubmit=function(e){
+    e.preventDefault();
+    var p=$("phone").value.trim(), pw=$("pw").value;
+    if(!/^(?:\+?256|0)7\d{8}$/.test(p.replace(/[\s-]/g,""))) return say($("msg"),"Enter a valid Uganda number, like 0745805716.");
+    if(mode==="register"){
+      if(pw.length<8) return say($("msg"),"Password must be at least 8 characters.");
+      if(!/[A-Za-z]/.test(pw)||!/\d/.test(pw)) return say($("msg"),"Password needs at least one letter and one number.");
+    } else if(!pw) return say($("msg"),"Enter your password.");
+    say($("msg"),""); $("submit").disabled=true;
+    call({action:mode,phone:p,password:pw})
+      .then(function(d){d.token?finish(d):showCode(d)})
+      .catch(function(err){say($("msg"),err.message)})
+      .then(function(){$("submit").disabled=false});
+  };
+
+  $("verify").onsubmit=function(e){
+    e.preventDefault();
+    var c=$("code").value.trim();
+    if(!/^\d{6}$/.test(c)) return say($("vmsg"),"Enter the 6-digit code.");
+    $("vsubmit").disabled=true;
+    call({action:"verify",phone:phone,code:c})
+      .then(finish)
+      .catch(function(err){say($("vmsg"),err.message)})
+      .then(function(){$("vsubmit").disabled=false});
+  };
+
+  $("resend").onclick=function(){
+    call({action:"resend",phone:phone})
+      .then(function(d){say($("vmsg"),d.devCode?"Test mode: your code is "+d.devCode:"A new code was sent.",true);startWait()})
+      .catch(function(err){say($("vmsg"),err.message)});
+  };
+
+  $("back").onclick=function(){
+    clearInterval(wait); $("verify").hidden=true; $("auth").hidden=false; say($("msg"),"");
+  };
+})();
+</script>
+</body>
+</html>
