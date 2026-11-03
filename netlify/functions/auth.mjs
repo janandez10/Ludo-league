@@ -52,8 +52,10 @@ async function sendSms(phone, code) {
     headers: { apiKey: process.env.AT_API_KEY, Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
     body: form,
   });
-  if (!res.ok) throw new Error("The SMS could not be sent.");
-  return {};
+  const data = await res.json().catch(() => ({}));
+if (!res.ok) throw new Error("SMS service refused the request (error " + res.status + "). Check AT_USERNAME and AT_API_KEY.");
+const r = data.SMSMessageData && data.SMSMessageData.Recipients && data.SMSMessageData.Recipients[0];
+if (!r || !/success/i.test(r.status)) throw new Error("SMS not sent: " + (r ? r.status : "no reply from provider") + ".");
 }
 
 async function issueCode(users, user) {
