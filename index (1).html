@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b0f17"><title>Ludo League</title>
+<style>
+:root{--bg:#0b0f17;--card:#131a26;--field:#0d121c;--line:#232c3d;--text:#f2f4f8;--mute:#8993a8;--red:#e11d48;--amber:#f59e0b;--c0:#e11d48;--c1:#16a34a;--c2:#eab308;--c3:#2563eb}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(900px 500px at 50% -10%,#2a0d18,var(--bg)) fixed;color:var(--text);font:16px/1.4 Roboto,system-ui,sans-serif;padding:max(10px,env(safe-area-inset-top)) 14px max(14px,env(safe-area-inset-bottom))}
+main{max-width:460px;margin:0 auto}
+.bar{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.bar b{font-size:20px;font-weight:900}.bar .sp{flex:1}
+.coins{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:7px 14px;font-weight:700;color:var(--amber)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:16px;margin-bottom:12px}
+.tabs{display:flex;background:var(--field);border-radius:14px;padding:5px;margin-bottom:12px}
+.tabs button{flex:1;border:0;background:none;color:var(--mute);font:inherit;font-weight:700;padding:11px;border-radius:10px}
+.tabs button.on{background:var(--red);color:#fff}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 14px}
+.chip{border:1px solid var(--line);background:var(--field);color:var(--text);font:inherit;font-weight:700;padding:10px 14px;border-radius:12px}
+.chip.on{border-color:var(--amber);color:var(--amber)}
+.btn{border:0;border-radius:14px;background:var(--red);color:#fff;font:inherit;font-weight:700;padding:14px 18px;width:100%;margin-top:8px}
+.btn.alt{background:var(--field);border:1px solid var(--line)}
+.btn.sm{width:auto;margin:0;padding:9px 14px}
+button:disabled{opacity:.5}
+button:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+.row{display:flex;align-items:center;gap:10px;padding:11px 0;border-top:1px solid var(--line)}
+.row:first-child{border-top:0}.row .sp{flex:1}
+.mute{color:var(--mute);font-size:14px}
+h3{margin:0 0 6px;font-size:17px}
+table{width:100%;border-collapse:collapse}th,td{padding:9px 4px;text-align:right}th:nth-child(-n+2),td:nth-child(-n+2){text-align:left}
+th{color:var(--mute);font-weight:500;font-size:14px}tr+tr td{border-top:1px solid var(--line)}
+.dot{width:14px;height:14px;border-radius:50%;display:inline-block}
+.msg{min-height:22px;color:#ff6b81;margin:6px 0}.msg.ok{color:#5eead4}
+svg{width:100%;height:auto;display:block;border-radius:16px;background:#101624}
+.tk{transition:transform .35s ease}
+.tk circle.b{stroke:#fff;stroke-width:.08}
+.tk.ok{cursor:pointer}.tk.ok circle.g{display:block}
+.tk circle.g{display:none;fill:none;stroke:#fff;stroke-width:.14;animation:p .8s infinite alternate}
+@keyframes p{to{r:.62;opacity:.4}}
+.dice{width:64px;height:64px;border-radius:16px;background:#fff;color:#111;font-size:34px;font-weight:900;display:grid;place-items:center}
+.turn{border-left:4px solid var(--amber);padding-left:8px}
+.over{position:fixed;inset:0;background:#000b;display:grid;place-items:center;padding:20px}
+.over .card{max-width:340px;text-align:center}
+[hidden]{display:none!important}
+@media (prefers-reduced-motion:reduce){.tk,.tk circle.g{transition:none;animation:none}}
+</style></head>
+<body><main>
+<div class="bar"><b>LUDO LEAGUE</b><span class="sp"></span><span class="coins" id="coins">…</span><button class="chip" id="out">Log out</button></div>
+<div id="view"></div>
+</main>
+<script>
+(function(){
+var T=localStorage.getItem("ll_token");
+if(!T){location.replace("login.html");return}
+var $=function(s){return document.querySelector(s)};
+var ME={},tab="lobby",gid=null,G=null,pick={stake:0,max:2},timer=null,tkDone=null;
+var STAKES=[0,200,500,1000,2000],COL=["#e11d48","#16a34a","#eab308","#2563eb"],START=[0,13,26,39];
+
+function api(a,o){
+  o=o||{};o.a=a;
+  return fetch("/api/game",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+T},body:JSON.stringify(o)})
+  .then(function(r){
+    if(r.status===401){localStorage.removeItem("ll_token");location.replace("login.html");throw new Error("Logging out")}
+    return r.json().then(function(d){if(!r.ok)throw new Error(d.error||"Something went wrong.");return d})
+  },function(e){throw new Error("Cannot reach the server.")});
+}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+function say(t,ok){var m=$("#msg");if(m){m.textContent=t||"";m.className="msg"+(ok?" ok":"")}}
+function lbl(s){return s?s+" coins":"Free"}
+
+$("#out").onclick=function(){localStorage.removeItem("ll_token");location.replace("login.html")};
+
+/* ---------- board geometry ---------- */
+var R=[];
+function seg(r,c,dr,dc,n){for(var i=0;i<n;i++)R.push([r+dr*i,c+dc*i])}
+seg(6,1,0,1,5);seg(5,6,-1,0,6);seg(0,7,0,1,2);seg(1,8,1,0,5);seg(6,9,0,1,6);seg(7,14,1,0,2);
+seg(8,13,0,-1,5);seg(9,8,1,0,6);seg(14,7,0,-1,2);seg(13,6,-1,0,5);seg(8,5,0,-1,6);seg(7,0,-1,0,2);
+var H=[[],[],[],[]];
+for(var i=0;i<5;i++){H[0].push([7,1+i]);H[1].push([1+i,7]);H[2].push([7,13-i]);H[3].push([13-i,7])}
+var B=[[[2,2],[2,4],[4,2],[4,4]],[[2,10],[2,12],[4,10],[4,12]],[[10,10],[10,12],[12,10],[12,12]],[[10,2],[10,4],[12,2],[12,4]]];
+var SAFE=[0,8,13,21,26,34,39,47];
+function xy(c,t,i){
+  var p;
+  if(t===-1)p=B[c][i];else if(t<=50)p=R[(START[c]+t)%52];else if(t<=55)p=H[c][t-51];else p=[7+(i<2?-.28:.28),7+(i%2?.28:-.28)];
+  return [p[1]+.5,p[0]+.5];
+}
+function boardSVG(){
+  var s='<svg viewBox="0 0 15 15" id="bd">';
+  [[0,0,0],[0,9,1],[9,9,2],[9,0,3]].forEach(function(q){
+    s+='<rect x="'+q[1]+'" y="'+q[0]+'" width="6" height="6" rx=".5" fill="'+COL[q[2]]+'"/><rect x="'+(q[1]+1)+'" y="'+(q[0]+1)+'" width="4" height="4" rx=".4" fill="#101624"/>';
+    B[q[2]].forEach(function(b){s+='<circle cx="'+(b[1]+.5)+'" cy="'+(b[0]+.5)+'" r=".42" fill="'+COL[q[2]]+'" opacity=".3"/>'});
+  });
+  R.forEach(function(c,i){
+    var st=START.indexOf(i),f=st>=0?COL[st]:"#1b2333";
+    s+='<rect x="'+c[1]+'" y="'+c[0]+'" width="1" height="1" fill="'+f+'" stroke="#2c374d" stroke-width=".05"/>';
+    if(SAFE.indexOf(i)>=0&&st<0)s+='<text x="'+(c[1]+.5)+'" y="'+(c[0]+.75)+'" font-size=".7" text-anchor="middle" fill="#8993a8">★</text>';
+  });
+  H.forEach(function(h,k){h.forEach(function(c){s+='<rect x="'+c[1]+'" y="'+c[0]+'" width="1" height="1" fill="'+COL[k]+'" opacity=".75" stroke="#2c374d" stroke-width=".05"/>'})});
+  s+='<rect x="6" y="6" width="3" height="3" fill="#1b2333"/><path d="M6 6L7.5 7.5L6 9Z" fill="'+COL[0]+'"/><path d="M6 6L9 6L7.5 7.5Z" fill="'+COL[1]+'"/><path d="M9 6L9 9L7.5 7.5Z" fill="'+COL[2]+'"/><path d="M6 9L9 9L7.5 7.5Z" fill="'+COL[3]+'"/>';
+  return s+'<g id="tks"></g></svg>';
+}
+function paintTokens(){
+  var g=$("#tks");if(!g||!G)return;
+  if(tkDone!==G.id){
+    var h="";
+    G.players.forEach(function(p,s){for(var i=0;i<4;i++)h+='<g class="tk" id="t'+s+'_'+i+'" data-i="'+i+'"><circle class="g" r=".5"/><circle class="b" r=".4" fill="'+COL[p.color]+'"/></g>'});
+    g.innerHTML=h;tkDone=G.id;
+  }
+  G.players.forEach(function(p,s){
+    p.tokens.forEach(function(t,i){
+      var e=document.getElementById("t"+s+"_"+i),c=xy(p.color,t,i);
+      if(!e)return;
+      e.style.transform="translate("+c[0]+"px,"+c[1]+"px)";
+      e.classList.toggle("ok",s===G.seat&&G.legal.indexOf(i)>=0);
+    });
+  });
+}
+
+/* ---------- screens ---------- */
+function head(){
+  api("me").then(function(m){ME=m;$("#coins").textContent=m.coins+" coins";if(tab==="lobby"&&!gid)drawLobby()}).catch(function(){});
+}
+function setTab(t){tab=t;gid=null;G=null;tkDone=null;clearInterval(timer);draw()}
+function draw(){
+  if(gid){drawGame();return}
+  $("#view").innerHTML='<div class="tabs"><button id="tL" class="'+(tab==="lobby"?"on":"")+'">Play</button><button id="tG" class="'+(tab==="league"?"on":"")+'">League</button></div><div id="pane"></div>';
+  $("#tL").onclick=function(){setTab("lobby")};$("#tG").onclick=function(){setTab("league")};
+  if(tab==="lobby"){drawLobby();timer=setInterval(drawLobby,3500)}else drawLeague();
+  head();
+}
+function drawLobby(){
+  if(gid||tab!=="lobby")return;
+  api("lobby").then(function(d){
+    if(gid||tab!=="lobby")return;
+    var claim=ME.claimIn>0?"Free coins in "+Math.ceil(ME.claimIn/3600000)+"h":"Claim 500 free coins";
+    var h='<div class="card"><h3>New table</h3><div class="mute">Stake</div><div class="chips">'+STAKES.map(function(s){return '<button class="chip'+(pick.stake===s?" on":"")+'" data-s="'+s+'">'+(s||"Free")+'</button>'}).join("")+'</div><div class="mute">Players</div><div class="chips">'+[2,3,4].map(function(n){return '<button class="chip'+(pick.max===n?" on":"")+'" data-m="'+n+'">'+n+'</button>'}).join("")+'</div><div class="msg" id="msg"></div><button class="btn" id="mk">Create table</button>'+(pick.stake===0?'<button class="btn alt" id="bots">Play now vs bots</button>':"")+'</div>';
+    h+='<div class="card"><h3>Open tables</h3>'+(d.tables.length?d.tables.map(function(t){return '<div class="row"><div class="sp"><b>'+esc(t.host)+'</b><div class="mute">'+lbl(t.stake)+" · "+t.count+"/"+t.max+' players</div></div><button class="btn sm" data-j="'+t.id+'">'+(t.mine?"Open":"Join")+'</button></div>'}).join(""):'<div class="mute">No open tables. Create one and wait for friends.</div>')+'</div>';
+    h+='<div class="card"><div class="row"><div class="sp"><b>'+esc(ME.name||"")+'</b><div class="mute">'+(ME.wins||0)+' wins · '+(ME.points||0)+' points</div></div><button class="chip" id="nm">Rename</button></div><button class="btn alt" id="cl"'+(ME.claimIn>0?" disabled":"")+'>'+claim+'</button></div>';
+    var p=$("#pane");if(!p)return;
+    var act=document.activeElement;if(act&&act.tagName==="BUTTON"&&p.contains(act)&&0){return}
+    p.innerHTML=h;
+    p.querySelectorAll("[data-s]").forEach(function(b){b.onclick=function(){pick.stake=+b.dataset.s;drawLobby()}});
+    p.querySelectorAll("[data-m]").forEach(function(b){b.onclick=function(){pick.max=+b.dataset.m;drawLobby()}});
+    p.querySelectorAll("[data-j]").forEach(function(b){b.onclick=function(){api("join",{id:b.dataset.j}).then(function(r){enter(r.id)}).catch(function(e){say(e.message)})}});
+    $("#mk").onclick=function(){api("create",{stake:pick.stake,max:pick.max}).then(function(r){enter(r.id)}).catch(function(e){say(e.message)})};
+    if($("#bots"))$("#bots").onclick=function(){api("create",{stake:0,max:pick.max,bots:pick.max-1}).then(function(r){enter(r.id)}).catch(function(e){say(e.message)})};
+    $("#cl").onclick=function(){api("claim").then(function(){head();say("500 coins added.",true)}).catch(function(e){say(e.message)})};
+    $("#nm").onclick=function(){var n=prompt("Your player name (2 to 14 characters)",ME.name||"");if(n)api("setname",{name:n}).then(head).catch(function(e){say(e.message)})};
+  }).catch(function(e){say(e.message)});
+}
+function drawLeague(){
+  api("standings").then(function(d){
+    $("#pane").innerHTML='<div class="card"><h3>Standings</h3><div class="mute">Win = 3 points. 2nd place = 1 point (3 or 4 players).</div><table><tr><th>#</th><th>Player</th><th>P</th><th>W</th><th>Pts</th></tr>'+(d.rows.length?d.rows.map(function(r,i){return '<tr><td>'+(i+1)+'</td><td>'+esc(r.name)+'</td><td>'+r.played+'</td><td>'+r.wins+'</td><td><b>'+r.points+'</b></td></tr>'}).join(""):'<tr><td colspan="5" class="mute">No matches played yet.</td></tr>')+'</table></div>';
+  }).catch(function(e){$("#pane").innerHTML='<div class="msg">'+esc(e.message)+'</div>'});
+}
+
+/* ---------- game ---------- */
+function enter(id){gid=id;G=null;tkDone=null;clearInterval(timer);$("#view").innerHTML='<div class="mute">Loading table…</div>';poll();timer=setInterval(poll,1300)}
+function poll(){
+  if(!gid)return;
+  api("state",{id:gid}).then(function(g){G=g;drawGame()}).catch(function(e){if(/not found|not at/i.test(e.message))leaveUI();else say(e.message)});
+}
+function act(a,o){o=o||{};o.id=gid;return api(a,o).then(function(r){if(r&&r.players){G=r;drawGame()}else poll()}).catch(function(e){say(e.message)})}
+function leaveUI(){gid=null;G=null;tkDone=null;clearInterval(timer);head();setTab("lobby")}
+function drawGame(){
+  if(!G){return}
+  var v=$("#view"),wait=G.status==="waiting";
+  if(!$("#bd")&&!wait){
+    v.innerHTML=boardSVG()+'<div id="side"></div>';
+    $("#bd").onclick=function(e){var t=e.target.closest(".tk.ok");if(t)act("move",{token:+t.dataset.i})};
+    tkDone=null;
+  }
+  if(wait){
+    v.innerHTML='<div class="card"><h3>Waiting for players</h3><div class="mute">'+lbl(G.stake)+' · '+G.players.length+'/'+G.max+' players</div>'+G.players.map(function(p){return '<div class="row"><span class="sp">'+esc(p.name)+(p.me?" (you)":"")+'</span></div>'}).join("")+'<div class="msg" id="msg"></div>'+(G.host?'<button class="btn" id="st"'+(G.players.length<2?" disabled":"")+'>Start game</button>'+(G.stake===0?'<button class="btn alt" id="ab">Add a bot</button>':""):"")+'<button class="btn alt" id="lv">Leave table</button></div>';
+    if($("#st"))$("#st").onclick=function(){act("start")};
+    if($("#ab"))$("#ab").onclick=function(){act("addbot")};
+    $("#lv").onclick=function(){api("leave",{id:gid}).then(leaveUI)};
+    return;
+  }
+  var mine=G.seat===G.turn&&G.status==="playing",cur=G.players[G.turn];
+  var info=G.status==="done"?"Game over":mine?(G.dice?"Tap a glowing token":"Your turn: roll the dice"):"Waiting for "+esc(cur.name);
+  $("#side").innerHTML='<div class="card" style="margin-top:12px"><div class="row" style="border:0;padding-top:0"><div class="dice" id="dc">'+(G.dice||"?")+'</div><div class="sp"><b>'+info+'</b><div class="mute">'+lbl(G.stake)+(G.stake?" · pot "+G.pot:"")+'</div></div><button class="btn sm" id="rl"'+(mine&&!G.dice?"":" disabled")+'>Roll</button></div>'+G.players.map(function(p,i){return '<div class="row'+(i===G.turn&&G.status==="playing"?" turn":"")+'"><span class="dot" style="background:'+COL[p.color]+'"></span><span class="sp">'+esc(p.name)+(p.me?" (you)":"")+'</span><span class="mute">'+p.tokens.filter(function(t){return t===56}).length+'/4 home</span></div>'}).join("")+'<div class="mute" style="margin-top:8px">'+G.log.map(esc).join("<br>")+'</div><div class="msg" id="msg"></div><button class="btn alt" id="lv">Leave game</button></div>'+
+  (G.status==="done"?'<div class="over"><div class="card"><h3>'+esc(G.players[G.winner].name)+' wins!</h3><div class="mute">'+(G.result?(G.result.refund?"A bot won, so stakes were returned.":(G.stake?"Pot of "+G.result.pot+" coins paid out.":"Friendly match.")):"")+'</div><button class="btn" id="bk">Back to lobby</button></div></div>':"");
+  $("#rl").onclick=function(){act("roll")};
+  $("#lv").onclick=function(){if(confirm("Leave? A bot will take your seat."))api("leave",{id:gid}).then(leaveUI)};
+  if($("#bk"))$("#bk").onclick=leaveUI;
+  paintTokens();
+}
+draw();
+})();
+</script></body></html>
